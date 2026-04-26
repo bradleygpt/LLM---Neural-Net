@@ -16,7 +16,7 @@ A coding-along build-out of Andrej Karpathy's \*Neural Networks: Zero to Hero\* 
 
 | 01 | \[01\_micrograd/](./01\_micrograd/) | done |
 
-| 02 | 02\_makemore\_bigram/ | pending |
+| 02 | \[02\_makemore\_bigram/](./02\_makemore\_bigram/) | done |
 
 | 03 | 03\_makemore\_mlp/ | pending |
 
