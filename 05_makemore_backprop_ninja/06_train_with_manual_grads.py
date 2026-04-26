@@ -8,12 +8,15 @@ This script integrates everything:
     - Forward pass with all intermediates exposed
     - Manual backward pass (the simplified BatchNorm form for speed)
     - Parameter updates with SGD
-    - Loss tracking
-    - Sample names from the trained model
+    - BatchNorm RUNNING STATS for inference (critical -- see below)
+    - Loss tracking + sampling
 
-If our manual gradients are correct, training should converge to
-similar loss as autograd-based training. We're verifying our derivations
-by their downstream consequence: the network actually learns.
+A subtle but important detail: BatchNorm computes mean/std FROM THE BATCH
+during training. At inference time, you typically only have one example,
+so batch stats are degenerate (var with batch=1 has zero degrees of
+freedom and produces NaN). The fix every real implementation uses:
+maintain RUNNING ESTIMATES of mean and variance during training, and use
+those frozen estimates at inference. We do that here.
 """
 
 import random
@@ -23,7 +26,7 @@ from data_utils import load_names, build_vocab, build_dataset
 
 
 # ---------------------------------------------------------------
-# Setup (same as script 01)
+# Setup
 # ---------------------------------------------------------------
 random.seed(42)
 torch.manual_seed(42)
@@ -54,6 +57,11 @@ parameters = [C, W1, b1, W2, b2, bngain, bnbias]
 print(f"Total params: {sum(p.numel() for p in parameters):,}")
 print()
 
+# Running stats for BatchNorm at inference. Updated during training,
+# used at inference time so we don't divide by zero on batch-of-1.
+bnmean_running = torch.zeros((1, HIDDEN))
+bnvar_running = torch.ones((1, HIDDEN))
+
 
 # ---------------------------------------------------------------
 # Training loop with manual backward
@@ -80,10 +88,15 @@ for step in range(STEPS):
 
     h = torch.tanh(hpreact)
     logits = h @ W2 + b2
-    loss = F.cross_entropy(logits, Yb)  # ok to USE this for the LOSS VALUE, we just won't call .backward()
+    loss = F.cross_entropy(logits, Yb)
+
+    # Update running stats with EMA (used at inference)
+    with torch.no_grad():
+        bnmean_running = 0.999 * bnmean_running + 0.001 * bnmean
+        bnvar_running = 0.999 * bnvar_running + 0.001 * bnvar
 
     # --- manual backward, end to end ---
-    # 1. cross-entropy + softmax => the standard closed form
+    # 1. cross-entropy + softmax => standard closed form
     dlogits = F.softmax(logits, dim=1)
     dlogits[range(N_BATCH), Yb] -= 1
     dlogits /= N_BATCH
@@ -96,7 +109,7 @@ for step in range(STEPS):
     # 3. tanh
     dhpreact = (1 - h**2) * dh
 
-    # 4. BatchNorm (use the simplified single-line backward)
+    # 4. BatchNorm (simplified single-line backward)
     dbngain = (bnraw * dhpreact).sum(0, keepdim=True)
     dbnbias = dhpreact.sum(0, keepdim=True)
     dhprebn = (bngain * bnvar_inv / N_BATCH) * (
@@ -132,18 +145,15 @@ print()
 
 
 # ---------------------------------------------------------------
-# Evaluate
+# Evaluate using running stats (inference mode)
 # ---------------------------------------------------------------
 @torch.no_grad()
 def split_loss(X, Y):
     emb = C[X]
     embcat = emb.view(emb.shape[0], -1)
     hprebn = embcat @ W1 + b1
-    # use TRAINING-style stats here for simplicity (in real production,
-    # we'd maintain running mean/var; we skipped that for clarity)
-    bnmean = hprebn.mean(0, keepdim=True)
-    bnvar = hprebn.var(0, keepdim=True, unbiased=True)
-    bnraw = (hprebn - bnmean) * (bnvar + 1e-5) ** -0.5
+    # Use running stats (frozen from training) instead of batch stats
+    bnraw = (hprebn - bnmean_running) * (bnvar_running + 1e-5) ** -0.5
     hpreact = bngain * bnraw + bnbias
     h = torch.tanh(hpreact)
     logits = h @ W2 + b2
@@ -167,14 +177,10 @@ def sample(g):
         emb_s = C[x]
         embcat_s = emb_s.view(1, -1)
         hprebn_s = embcat_s @ W1 + b1
-        bnmean_s = hprebn_s.mean(0, keepdim=True)
-        bnvar_s = hprebn_s.var(0, keepdim=True, unbiased=True)
-        bnraw_s = (hprebn_s - bnmean_s) * (bnvar_s + 1e-5) ** -0.5
+        # Use running stats -- avoids div-by-zero with batch size 1
+        bnraw_s = (hprebn_s - bnmean_running) * (bnvar_running + 1e-5) ** -0.5
         h_s = torch.tanh(bngain * bnraw_s + bnbias)
         logits_s = h_s @ W2 + b2
-        # NB: with batch=1 the BN stats above are degenerate. In real code
-        # you'd use running stats. For sampling here we keep things simple
-        # and just live with the artifact -- it doesn't affect names much.
         probs = F.softmax(logits_s, dim=1)
         ix = torch.multinomial(probs, num_samples=1, generator=g).item()
         context = context[1:] + [ix]
@@ -220,7 +226,9 @@ Why this lesson is the most-recommended of the series:
 - You can debug NaN/Inf gradients by knowing exactly where they
   came from. "It came from the BN backward" -- you know which path.
 - You appreciate why LayerNorm replaced BatchNorm in transformers:
-  LN's backward is much simpler because it normalizes per-example.
+  LN normalizes per-example, so its backward is simpler AND it doesn't
+  need running stats -- it uses the same formula at training and
+  inference. Big win.
 - You're prepared for the next-level work: writing CUDA kernels,
   adding ops to JAX, contributing to PyTorch source.
 
