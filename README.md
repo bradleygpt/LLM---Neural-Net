@@ -20,7 +20,7 @@ A coding-along build-out of Andrej Karpathy's \*Neural Networks: Zero to Hero\* 
 
 | 03 | \[03\_makemore\_mlp/](./03\_makemore\_mlp/) | done |
 
-| 04 | 04\_makemore\_activations\_batchnorm/ | pending |
+| 04 | \[04\_makemore\_activations\_batchnorm/](./04\_makemore\_activations\_batchnorm/) | done |
 
 | 05 | 05\_makemore\_backprop\_ninja/ | pending |
 
