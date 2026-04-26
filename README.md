@@ -24,7 +24,7 @@ A coding-along build-out of Andrej Karpathy's \*Neural Networks: Zero to Hero\* 
 
 | 05 | \[05\_makemore\_backprop\_ninja/](./05\_makemore\_backprop\_ninja/) | done |
 
-| 06 | 06\_makemore\_wavenet/ | pending |
+\[06\_makemore\_wavenet/](./06\_makemore\_wavenet/) | done |
 
 | 07 | 07\_build\_gpt/ | pending |
 
