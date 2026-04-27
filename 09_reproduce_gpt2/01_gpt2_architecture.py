@@ -218,11 +218,10 @@ if __name__ == "__main__":
     config = GPTConfig()
     model = GPT(config)
 
-    # Count parameters
+    # Count parameters. PyTorch's model.parameters() automatically dedupes
+    # shared tensors (so the tied wte/lm_head weight is counted once), giving
+    # us the canonical published parameter count.
     n_params = sum(p.numel() for p in model.parameters())
-    n_params_unique = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    # Subtract the shared lm_head weight count -- we counted it twice via wte
-    n_params_real = n_params - model.lm_head.weight.numel()
 
     print(f"GPT-2 small architecture built.")
     print(f"  block_size:  {config.block_size}")
@@ -231,11 +230,9 @@ if __name__ == "__main__":
     print(f"  n_head:      {config.n_head}")
     print(f"  n_embd:      {config.n_embd}")
     print()
-    print(f"Total parameters (with weight tying): {n_params_real / 1e6:.2f}M")
-    print(f"  (without tying would be: {n_params / 1e6:.2f}M)")
-    print()
-    print(f"Published GPT-2 small: 124M parameters")
-    print(f"Match: {abs(n_params_real / 1e6 - 124) < 1.0}")
+    print(f"Total parameters: {n_params / 1e6:.2f}M")
+    print(f"Published GPT-2 small: 124M")
+    print(f"Match: {abs(n_params / 1e6 - 124) < 1.0}")
     print()
 
     # Quick forward pass
