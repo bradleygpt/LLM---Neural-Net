@@ -51,7 +51,9 @@ GPT2_PATTERN = re.compile(
 
 
 def get_stats(ids, counts=None):
-    counts = counts or {}
+    # IMPORTANT: use `is None` not `or {}`. An empty dict is FALSY in Python.
+    if counts is None:
+        counts = {}
     for pair in zip(ids, ids[1:]):
         counts[pair] = counts.get(pair, 0) + 1
     return counts

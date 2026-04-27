@@ -115,7 +115,11 @@ print()
 # Build a regex-pretok BPE tokenizer
 # ---------------------------------------------------------------
 def get_stats(ids, counts=None):
-    counts = counts or {}
+    # IMPORTANT: use `is None` not `or {}`. An empty dict is FALSY in Python,
+    # so `counts or {}` would replace a passed-in empty dict with a fresh one,
+    # silently breaking the cross-chunk accumulator.
+    if counts is None:
+        counts = {}
     for pair in zip(ids, ids[1:]):
         counts[pair] = counts.get(pair, 0) + 1
     return counts
